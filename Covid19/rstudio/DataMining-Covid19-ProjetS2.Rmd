@@ -1,0 +1,683 @@
+---
+title: "DataMining - Covid19"
+output:
+  html_document:
+    number_sections: yes
+    theme: readable
+    toc: yes
+    toc_float: yes
+---
+  
+```{r setup, include = FALSE}
+knitr::opts_chunk$set(echo = FALSE, error = FALSE, message = FALSE, warning = FALSE, fig.align='center')
+```
+
+
+#### Nom et Prénom des étudiants du groupe :
+
+```
+- Nom : Anandhan  Prénom : Cyril
+- Nom : Geffard   Prénom : Lucas
+- Nom : Juif      Prénom : Maximilien
+- Nom : Rabahi    Prénom : Ales
+```
+
+```{r, include=FALSE} 
+############## NE PAS OUBLIER D'INSTALLER TOUTES LES LIBRAIRIES NECESSAIRES ############## 
+# Elles ne sont pas toutes citées dans les commentaires ci-dessous, en rajouter ci besoin !
+#Installation des packages :
+#options(repos=c(CRAN="<something sensible near you>"))
+#install.packages("sqldf")
+#install.packages("lubridate")
+#install.packages("corrplot")
+#install.packages("FactoMineR")
+#install.packages("factoextra")
+#install.packages(c("wordcloud","tm"),repos="http://cran.r-project.org")
+library(wordcloud)
+#library(tm)
+library(lubridate)
+library(sqldf)
+library(readr)
+library(Hmisc)
+library(corrplot)
+library(FactoMineR)
+library(factoextra)
+library(dplyr)
+library(tidyverse)
+library(rpart)
+library(rpart.plot)
+library("zoo")
+```
+
+```{r, echo = FALSE}
+rm (list=ls())
+#Importation des données :
+
+#DATA REGION
+donnees_hospitalieres_classe_age_covid19_2020_05_18_19h00 <- read_delim("H:/Desktop/Data_Covid/FranceUtile/CovidHospitalisation/donnees-hospitalieres-classe-age-covid19-2020-05-18-19h00.csv", ";", escape_double = FALSE, trim_ws = TRUE)
+
+sursaud_covid19_quotidien_2020_05_18_19h00_region <- read_csv("H:/Desktop/Data_Covid/FranceUtile/CovidRegion_24Fev/sursaud-covid19-quotidien-2020-05-19-19h00-region.csv")
+sursaud_covid19_quotidien_2020_05_25_19h00_france <- read_csv("Data_Covid/FranceUtile/CovidRegion_24Fev/sursaud-covid19-quotidien-2020-05-25-19h00-france.csv")
+sursaud_covid19_quotidien_2020_05_25_19h00_france <- sqldf('select * from sursaud_covid19_quotidien_2020_05_25_19h00_france where sursaud_cl_age_corona = 0 ')
+
+#covid_cedc_quot <- read_delim("H:/Desktop/Data_Covid/FranceUtile/CovidRegionDeces/covid-cedc-quot.csv", ";", escape_double = FALSE, trim_ws = TRUE)
+
+region2019 <- read_csv("H:/Desktop/Data_Covid/region2019.csv")
+
+#DATA ILLE DE FRANCE
+CovidIleDeFrance <- read_delim("H:/Desktop/Data_Covid/FranceUtile/IleDeFrance/CovidIleDeFrance.csv", ";", escape_double = FALSE, trim_ws = TRUE)
+
+#summary(sursaud_covid19_quotidien_2020_05_18_19h00_region)
+#summary(donnees_hospitalieres_classe_age_covid19_2020_05_18_19h00)
+
+#World
+LineList <- read_csv("H:/Desktop/Data_Covid/World/LineList.csv")
+```
+
+# Introduction 
+
+<p style="text-align:justify;">Cette partie Data Mining a pour but de réaliser des prédictions sur les données du coronavirus en France. Différentes variables seront utilisées comme par exemple les tranches d'âge, le sexe ou encore les différentes régions des individus afin de prédire les survivants. Pour cela, trois grandes étapes seront nécessaires dont la recherche des bonnes bases de données, l'étude descriptive de celles-ci et enfin des analyses statistiques plus poussées comme l'utilisation des arbres de décision.</br>
+
+Pour ce qui est des données plusieurs jeux sont utilisés. Pour les jeux de données axées particulièrement sur la France, ils proviennent du site data.gouv.fr qui receuil toutes les données publiées par les différents Ministère français. Pour les jeux de données internationaux, ils proviennent du site Kaggle.</p>
+</br></br>
+
+
+# Statistiques descriptives
+
+<p style="text-align:justify;">Pour commencer, nous allons tout d'abord nous intéresser aux statistiques descriptives de nos jeux de données. Cela nous permettra à la fois d'obtenir une vue d'ensemble des données que nous avons choisi, et en même temps de récolter des premiers résultats très intéressants.</p>
+
+## Hospitalisations en fonction de l'âge
+
+<p style="text-align:justify;">Grâce à ce graphique nous pouvons étudier de plus près le lien qu'il pourrait exister entre l'âge et les hospitalisations.</p>
+
+```{r, echo = FALSE}
+#Variables : Age, sexe, région, problème de santé
+
+#Statistique descriptive afin de résumer les données  
+#summary(sursaud_covid19_quotidien_2020_05_18_19h00_region)
+#summary(donnees_hospitalieres_classe_age_covid19_2020_05_18_19h00)
+
+O = sqldf('select sum(nbre_hospit_corona) from sursaud_covid19_quotidien_2020_05_18_19h00_region where sursaud_cl_age_corona="O"')
+A = sqldf('select sum(nbre_hospit_corona) from sursaud_covid19_quotidien_2020_05_18_19h00_region where sursaud_cl_age_corona="A"')
+B = sqldf('select sum(nbre_hospit_corona) from sursaud_covid19_quotidien_2020_05_18_19h00_region where sursaud_cl_age_corona="B"')
+C = sqldf('select sum(nbre_hospit_corona) from sursaud_covid19_quotidien_2020_05_18_19h00_region where sursaud_cl_age_corona="C"')
+D = sqldf('select sum(nbre_hospit_corona) from sursaud_covid19_quotidien_2020_05_18_19h00_region where sursaud_cl_age_corona="D"')
+E = sqldf('select sum(nbre_hospit_corona) from sursaud_covid19_quotidien_2020_05_18_19h00_region where sursaud_cl_age_corona="E"')
+
+Nb_Hospitalisation <- sqldf('Select * from O union select * from A union select * from B union select * from C union select * from D union select * from E')
+Nb_Hospitalisation <- t(Nb_Hospitalisation)
+
+barplot(Nb_Hospitalisation, names.arg = c("Age inconnu","-15","15-44","45-64","65-74","75+"),main="Répartition des hospitalisations en fonction de l'age")
+
+rm(list = "A", "B", "C", "D", "E", "O")
+```
+
+<p style="text-align:justify;">On peut très vite se rendre compte qu'il y a bien un lien entre ces deux variables. En effet, les groupes de personnes agées sont beaucoup plus représentées que les classes de population plus jeune. A l'inverse il y a très peu de personnes de moins de 45 ans qui ont été hospitalisées. La croissance des hospitalisations en fonction de l'âge semble même être exponentielle, car la dernnière classe (+75) est extrêment représentée par rapport aux autres.</p>
+
+
+## Hospitalisations réparties par sexe
+
+<p style="text-align:justify;">Continuons notre analyse descriptive en s'intéressant toujours aux hospitalisations mais cette fois avec la variable sexe, afin de savoir si les hommes sont plus touchés que les femmes ou inversement. Nous nous intéressons également aux actes hospitaliers qui ont pu être réalisés sur des personnes potentiellement atteintes par le virus.</p>
+
+```{r, echo = FALSE}
+#Hospitalisation H/F
+par(mfrow=c(1,2))
+f = sqldf('select sum(nbre_hospit_corona_f) from sursaud_covid19_quotidien_2020_05_18_19h00_region')
+h = sqldf('select sum(nbre_hospit_corona_h) from sursaud_covid19_quotidien_2020_05_18_19h00_region')
+fh = f+h 
+f = round(f/fh*100,1)
+h = round(h/fh*100,1)
+Hos_FH <- c(f,h)
+pie((c(46.5, 53.5)), labels = c("Femme - 46.5%", "Homme 53.5%"), main = "Hospitalisations")
+rm(list = "f", "h", "fh")
+
+f = sqldf('select sum(nbre_acte_corona_f) from sursaud_covid19_quotidien_2020_05_25_19h00_france')
+h = sqldf('select sum(nbre_acte_corona_h) from sursaud_covid19_quotidien_2020_05_25_19h00_france')
+fh = f+h 
+f = round(f/fh*100,1)
+h = round(h/fh*100,1)
+Acte_FH <- c(f,h)
+pie((c(57.8, 42.2)), labels = c("Femme - 57.8%", "Homme 42.2%"), main = "Actes hospitaliers")
+rm(list = "f", "h", "fh")
+par(mfrow=c(1,1))
+
+#Nombre moyen d'acte hospitalier par H/F
+NbAF = sqldf('select sum(nbre_acte_corona_f) as NombreMoyenActesMedicauxParFemme from sursaud_covid19_quotidien_2020_05_25_19h00_france') / sqldf('select sum(nbre_hospit_corona_f) from sursaud_covid19_quotidien_2020_05_18_19h00_region')
+NbAH = sqldf('select sum(nbre_acte_corona_h) as NombreMoyenActesMedicauxParHomme from sursaud_covid19_quotidien_2020_05_25_19h00_france') / sqldf('select sum(nbre_hospit_corona_h) from sursaud_covid19_quotidien_2020_05_18_19h00_region')
+############# Explication de différence du ratio des morts ???
+```
+
+<p style="text-align:justify;">Avec un résultat de 46.5% pour les femmes et 53.5% pour les hommes nous pouvons dire qu'il ne semblerait pas avoir de lien très significatif entre le sexe et les hospitalisations. En effet, il y a légèrement plus d'hommes mais cela n'est pas flagrant, il faudra tout de même essayer de vérifer cela plus tard dans notre analyse.</br>
+Par contre, on constate étonnamment qu'il y a plus de soins portés aux femmes potentiellement porteuses du virus plutôt qu'aux hommes. Si l'on calcul ces proportions d'actes hospitaliers par rapport aux hospitalisations H/F les résultats sont flaggrants. Il y a environ 0.66 acte hospitalier par homme présentant des symptômes du coronavirus contre 1.06 actes hospitaliers par femme. Cette différence est à première vue très dure a expliquer, nous verrons au cours de notre étude s'il y a un/des facteurs explicatifs. (Acte hospitalier ne signifie pas forcément réanimation, ces données ne sont d'ailleurs pas disponibles avec la répartition H/F)</br>
+Pour ce qui est du taux de mortalité H/F en France, les données ne sont pas disponibles non plus. Certaines estimations ont tout de même étaient réalisées et prétendaient un léger taux de mortalité plus importants pour les hommes. Nous essayerons également de vérifier cela par la suite.</p>
+
+
+## Hospitalisations par région
+
+<p style="text-align:justify;">Cette fois-ci nous nous intéressons aux hospitalisations réparties par région. En effet, le coronavirus a impacté de façon très inégalitaire la France, il est donc très intéressant de regarder de plus près sa répartition.</p>
+
+```{r, echo = FALSE}
+#Hospitalisation région
+#sql group by reg
+region <- sqldf('select distinct(reg) as reg, sum(nbre_hospit_corona) as Hospitalisation from sursaud_covid19_quotidien_2020_05_18_19h00_region group by reg')
+region[is.na(region)] <- 0
+
+region <- region[c(-6,-7),]
+region2019 <- region2019[,c(1,4)]
+region <- sqldf('select * from region inner join region2019 on region.reg = region2019.reg')
+region <- region[,-3]
+region <- sqldf('select * from region order by Hospitalisation')
+
+labels <- region$ncc
+mp <- barplot(region$Hospitalisation, axes = FALSE, axisnames = FALSE, main="Nombre d'hospitalisations par région")
+text(mp, par("usr")[3], labels = labels, srt = 30, adj = c(1.1,1.1), xpd = TRUE, cex=.6)
+axis(2)
+```
+
+<p style="text-align:justify;">Comme prévu nous remarquons des inégalités conséquentes entre les régions. La Martinique ne recense presque aucune hospitalisation alors que l'Ile de France dépasse les 30 000 cas d'hospitalisations. Par ailleurs, on remarque également que trois régions se démarquent de part leur nombre d'hospitalisations : le Grand Est, l'Auvergne Rhône-Alpes et comme dit précédemment l'Ile de France. Nous nous intéresserons alors plus particulièrement à leur cas par la suite.</p>
+
+
+## Evolution en fonction du temps
+
+```{r, echo = FALSE}
+#Evolution des hospitalisations au cours du temps
+par(mfrow=c(2,2))
+EvolutionCovid <- sqldf('Select distinct(jour), cl_age90, sum(hosp) as hosp, sum(rea) as rea, sum(rad) as rad, sum(dc) as dc from donnees_hospitalieres_classe_age_covid19_2020_05_18_19h00 group by jour')
+plot(EvolutionCovid$jour,EvolutionCovid$hosp, main="Evolution des hospitalisations", xlab="Temps", ylab="Nb hospitalisés")
+
+
+#Evolution des personnes en réanimation au cours du temps 
+plot(EvolutionCovid$jour,EvolutionCovid$rea, main="Evolution des personnes en réanimation", xlab="Temps", ylab="Nb réanimations")
+
+
+#Evolution des décès au cours du temps
+plot(EvolutionCovid$jour,EvolutionCovid$dc, main="Nombre de décès cumulés", xlab="Temps", ylab="Nb décès cumulés")
+
+
+#Evolution des personnes guéris au cours du temps
+plot(EvolutionCovid$jour,EvolutionCovid$rad, main="Nombre de personnés guéries cumulées", xlab="Temps", ylab="Nb guéris cumulés")
+par(mfrow=c(1,1))
+```
+
+<p style="text-align:justify;">Ces quatre graphiques sont très utiles pour se rendre compte de l'évolution de l'épidémie au sein de la France. On remarque qu'il y a eu une très forte évolution du taux d'hospitalisation jusqu'à mi-avril eniron, ce qui entraine alors également une vague du nombre de personnes en réanimation durant ces mêmes dates. Ensuite on peut voir une baisse progressive et beaucoup moins rapide qui a débuté mi-avril.</br>
+Les graphiques du nombre de décès et de personnes guéries cumulées sont également très pertinents. En effet, pour le nombre de décès on peut constater un forte croissance lors des premiers mois de l'épidémie puis depuis le début mai le nombre de décès diminue, la courbe commence à stagner. Pour le nombre de personnes guéries la croissance est continue et toujours très forte. Si cette courbe continue à être croissante on remarque tout de même un début de diminution des personnes guéries mi-mai ce qui prouve qu'il y a de moins en moins de nouvelles personnes hospitalisées.</p>
+
+
+
+## Evolution des trois régions les plus impactées
+
+### Hospitalisations
+
+<p style="text-align:justify;">Désormais nous allons nous concentrer sur l'évolution de l'épidémie par région. Mais afficher l'évolution de dizaine de régions sur un même graphique n'est pas optimal donc nous avons décidé pour cette petite partie de nous concentrer sur les trois régions de France les plus touchées par le virus.</p>
+
+```{r}
+#Evolution pour les 3 régions les plus touchées (Ille de France 11, Grand Est 44, Rhones Alpes 84)
+EvolutionCovid11 <- sqldf('Select distinct(jour), cl_age90, sum(hosp) as hosp, sum(rea) as rea, sum(rad) as rad, sum(dc) as dc from donnees_hospitalieres_classe_age_covid19_2020_05_18_19h00 where reg = "11" group by jour')
+EvolutionCovid44 <- sqldf('Select distinct(jour), cl_age90, sum(hosp) as hosp, sum(rea) as rea, sum(rad) as rad, sum(dc) as dc from donnees_hospitalieres_classe_age_covid19_2020_05_18_19h00 where reg = "44" group by jour')
+EvolutionCovid84 <- sqldf('Select distinct(jour), cl_age90, sum(hosp) as hosp, sum(rea) as rea, sum(rad) as rad, sum(dc) as dc from donnees_hospitalieres_classe_age_covid19_2020_05_18_19h00 where reg = "84" group by jour')
+
+
+#Graphique des trois régions les plus touchées - Hospitalisations
+par(xpd=TRUE, mfrow=c(2,1))
+matplot(EvolutionCovid11$jour, EvolutionCovid11$hosp, type = "b", lty = 1:5, lwd = 1, lend = par("lend"),
+        pch = 16, col = "blue", cex = NULL, bg = NA, xaxt = "n", main= "Evolution des hospitalisations",
+        xlab = "", ylab = "Hospitalisations", xlim = NULL, ylim = NULL,
+        log = "", add = FALSE, verbose = getOption("verbose"))
+matplot(EvolutionCovid44$jour, EvolutionCovid44$hosp, type = "b", lty = 1:5, lwd = 1, lend = par("lend"),
+        pch = 16, col = "red", cex = NULL, bg = NA,
+        xlab = "", ylab = NULL, xlim = NULL, ylim = NULL,
+        log = "", add = TRUE, verbose = getOption("verbose"))
+matplot(EvolutionCovid84$jour, EvolutionCovid84$hosp, type = "b", lty = 1:5, lwd = 1, lend = par("lend"),
+        pch = 16, col = "green", cex = NULL, bg = NA,
+        xlab = "", ylab = NULL, xlim = NULL, ylim = NULL,
+        log = "", add = TRUE, verbose = getOption("verbose"))
+
+legend("bottom", legend=c("Ile de France", "Grand Est", "Auvergne Rhones Alpes"), horiz = TRUE , inset = c(0, -1), col=c("blue", "red", "green"), lty=1:2, cex=0.8, pch = c(16, 16, 16))
+
+#Graphique des trois régions les plus touchées en fonction de leur population ( en million : - 12.21 - 5.518 - 8.027)
+matplot(EvolutionCovid11$jour, EvolutionCovid11$hosp/12.21, type = "b", lty = 1:5, lwd = 1, lend = par("lend"),
+        pch = 16, col = "blue", cex = NULL, bg = NA, xaxt = "n", main= "Evolution des hospitalisations en fonction de la taille de la population",
+        xlab = "", ylab = "Hospitalisations", xlim = NULL, ylim = NULL,
+        log = "", add = FALSE, verbose = getOption("verbose"))
+matplot(EvolutionCovid44$jour, EvolutionCovid44$hosp/5.518, type = "b", lty = 1:5, lwd = 1, lend = par("lend"),
+        pch = 16, col = "red", cex = NULL, bg = NA,
+        xlab = "", ylab = "", xlim = NULL, ylim = NULL,
+        log = "", add = TRUE, verbose = getOption("verbose"))
+matplot(EvolutionCovid84$jour, EvolutionCovid84$hosp/8.027, type = "b", lty = 1:5, lwd = 1, lend = par("lend"),
+        pch = 16, col = "green", cex = NULL, bg = NA,
+        xlab = "", ylab = "", xlim = NULL, ylim = NULL,
+        log = "", add = TRUE, verbose = getOption("verbose"))
+par(mfrow=c(1,1))
+
+
+```
+
+<p style="text-align:justify;">Le premier graphique permet de mettre en avant l'évolution des hospitalisations dans le temps. On constate comme prévu que l'Ile de France a subi énormément d'hospitalisations. Le deuxième graphique quant à lui permet de se rendre compte du nombre de cas en proportion avec la population des régions. c'est particulièrement intéressant car il nous permet de se rendre compte qu'au final l'Ile de France et le Grand Est ont été touchées de façon très semblables par cette épididémie. A l'inverse on constate que par rapport à son nombre d'habitants la région Auvergne Rhône Alpes a été un peu plus épargnée.</p>
+
+### Décès
+
+<p style="text-align:justify;">L'évolution du taux de décès est également l'un des facteurs les plus importants à prendre en compte. C'est pour quoi nous allons regarder en détail l'évolution des trois régions les plus touchées.</p>
+
+```{r, echo = FALSE}
+#Graphique des trois régions les plus touchées- décès
+par(xpd=TRUE, mfrow=c(2,1))
+matplot(EvolutionCovid11$jour, EvolutionCovid11$dc, type = "b", lty = 1:5, lwd = 1, lend = par("lend"),
+        pch = 16, col = "blue", cex = NULL, bg = NA, xaxt = "n", main= "Evolution des décès",
+        xlab = "", ylab = "Décès cumulés", xlim = NULL, ylim = NULL,
+        log = "", add = FALSE, verbose = getOption("verbose"))
+matplot(EvolutionCovid44$jour, EvolutionCovid44$dc, type = "b", lty = 1:5, lwd = 1, lend = par("lend"),
+        pch = 16, col = "red", cex = NULL, bg = NA,
+        xlab = "", ylab = NULL, xlim = NULL, ylim = NULL,
+        log = "", add = TRUE, verbose = getOption("verbose"))
+matplot(EvolutionCovid84$jour, EvolutionCovid84$dc, type = "b", lty = 1:5, lwd = 1, lend = par("lend"),
+        pch = 16, col = "green", cex = NULL, bg = NA,
+        xlab = "", ylab = NULL, xlim = NULL, ylim = NULL,
+        log = "", add = TRUE, verbose = getOption("verbose"))
+
+legend("bottom", legend=c("Ile de France", "Grand Est", "Auvergne Rhones Alpes"), horiz = TRUE , inset = c(0, -1), col=c("blue", "red", "green"), lty=1:2, cex=0.8, pch = c(16, 16, 16))
+
+#Graphique des trois régions les plus touchées en fonction de leur population ( en million : - 12.21 - 5.518 - 8.027)
+matplot(EvolutionCovid11$jour, EvolutionCovid11$dc/12.21, type = "b", lty = 1:5, lwd = 1, lend = par("lend"),
+        pch = 16, col = "blue", cex = NULL, bg = NA, xaxt = "n", main= "Evolution des décès en fonction de la taille de la population",
+        xlab = "", ylab = "Décès cumulés", xlim = NULL, ylim = NULL,
+        log = "", add = FALSE, verbose = getOption("verbose"))
+matplot(EvolutionCovid44$jour, EvolutionCovid44$dc/5.518, type = "b", lty = 1:5, lwd = 1, lend = par("lend"),
+        pch = 16, col = "red", cex = NULL, bg = NA,
+        xlab = "", ylab = "", xlim = NULL, ylim = NULL,
+        log = "", add = TRUE, verbose = getOption("verbose"))
+matplot(EvolutionCovid84$jour, EvolutionCovid84$dc/8.027, type = "b", lty = 1:5, lwd = 1, lend = par("lend"),
+        pch = 16, col = "green", cex = NULL, bg = NA,
+        xlab = "", ylab = "", xlim = NULL, ylim = NULL,
+        log = "", add = TRUE, verbose = getOption("verbose"))
+par(mfrow=c(1,1))
+
+```
+
+<p style="text-align:justify;"> On remarque qu'il y a peu de décès au début de l'épidémie. Mais d'un coup les courbes augmentent de façon très significatives jusqu'à atteindre plusieurs milliers de morts. Ce qui est aussi très intéressant c'est de constater que commme pour le nombre d'hospitalisations, on peut voir que le nombre de décès rapporté par le nombre d'habitants démontre encore que le Grand Est a été touchée aussi durement que l'Ile de France par la covid.</p>
+
+
+
+### Vitesse de propagation
+
+La vitesse de propagation du virus est l'une des données les plus compliquées à mettre en avant mais en même temps l'une des plus importante.
+
+```{r}
+#On s'intéresse maintenant uniquement à l'allure des courbes - Vitesse
+par(xpd=F, mar=c(4,4,3,5)) 
+plot(EvolutionCovid11$jour,EvolutionCovid11$hosp,col="blue",xlab="",ylab="Croissance des hospitalisations et des décès", yaxt="n")
+abline(v = as.Date("2020-04-14"), col="purple",lty=2, lwd=3)
+par(new = T)  
+plot(EvolutionCovid44$jour,EvolutionCovid44$hosp,col="red",axes=F,xlab="",ylab="", main = "Vitesse de propagation du virus et des décès cumulés") 
+par(new = T)
+plot(EvolutionCovid84$jour,EvolutionCovid84$hosp,col="green",axes=F,xlab="",ylab="") 
+
+par(new = T) 
+plot(EvolutionCovid11$jour,EvolutionCovid11$dc,col="blue",xlab="",ylab="", yaxt="n", type="l")
+par(new = T)  
+plot(EvolutionCovid44$jour,EvolutionCovid44$dc,col="red",axes=F,xlab="",ylab="", main = "", type="l") 
+par(new = T)
+plot(EvolutionCovid84$jour,EvolutionCovid84$dc,col="green",axes=F,xlab="",ylab="", type="l") 
+
+legend("bottomright", legend=c("Ile de France", "Grand Est", "Auvergne Rhones Alpes", "Coefficient multiplicateur < 1"), horiz = F, inset = c(0, 0), col=c("blue", "red", "green", "purple"), lty=1:2, cex=0.8, pch = c(16, 16, 16, NA))
+par(mfrow=c(1,1))
+########## coefficient multiplicateur des évolutions
+
+n=nrow(EvolutionCovid11)
+for(i in 1:n) { 
+  EvolutionCovid11$RatioHosp[i] <- (EvolutionCovid11$hosp[i+1] / EvolutionCovid11$hosp[i])
+}
+n=nrow(EvolutionCovid44)
+for(i in 1:n) { 
+  EvolutionCovid44$RatioHosp[i] <- (EvolutionCovid44$hosp[i+1] / EvolutionCovid44$hosp[i])
+}
+n=nrow(EvolutionCovid84)
+for(i in 1:n) { 
+  EvolutionCovid84$RatioHosp[i] <-(EvolutionCovid84$hosp[i+1] / EvolutionCovid84$hosp[i])
+}
+matplot(EvolutionCovid11$jour, EvolutionCovid11$RatioHosp, type = "b", lty = 1:5, lwd = 1, lend = par("lend"),
+        pch = 16, col = "blue", cex = NULL, bg = NA, xaxt = "n",
+        xlab = "", ylab = "Indice multiplicateur de la propagation", xlim = NULL, ylim = NULL,
+        log = "", add = FALSE, verbose = getOption("verbose"))
+matplot(EvolutionCovid44$jour, EvolutionCovid44$RatioHosp, type = "b", lty = 1:5, lwd = 1, lend = par("lend"),
+        pch = 16, col = "red", cex = NULL, bg = NA,
+        xlab = "", ylab = "", xlim = NULL, ylim = NULL,
+        log = "", add = TRUE, verbose = getOption("verbose"))
+matplot(EvolutionCovid84$jour, EvolutionCovid84$RatioHosp, type = "b", lty = 1:5, lwd = 1, lend = par("lend"),
+        pch = 16, col = "green", cex = NULL, bg = NA,
+        xlab = "", ylab = "", xlim = NULL, ylim = NULL,
+        log = "", add = TRUE, verbose = getOption("verbose"))
+abline(h=1, col="purple",lty=2, lwd=3)
+legend("topright", legend=c("Ile de France", "Grand Est", "Auvergne Rhones Alpes", "Coefficient multiplicateur < 1"), horiz = FALSE, inset = c(0, 0), col=c("blue", "red", "green", "purple"), lty=1:2, cex=0.8, pch = c(16, 16, 16, NA))
+```
+
+<p style="text-align:justify;">Sur ces graphiques nous pouvons voir la vitesse de croissance du nombre d'hospitalisations et de décès pour les trois régions les plus touchées. Ces graphiques ne se base pas sur le nombre de cas (5 000 ou 10 000) mais sur la vitesse dont les hospitalisations et décès augmentent (c'est à dire, le coefficient multlicateur journalier). On peut alors remarquer très clairement que la vitesse de propagation a été exactement la même dans toutes les régions. Cela signifie que le coronavirus est apparu à des dates plutôt similaires et a pu croitre avec un modèle casi identique dans ces régions. Cette donnée est très importante car elle permet d'émettre l'hypothèse que les facteurs responsables de la transmission du virus sont très certainement les mêmes partout en France (du moins pour les régions très touchées). </br>
+Néanmoins, malgré cette grande similarité on constate également qu'il y a tout de même eu un nombre de décès important plus rapidement dans le Grand Est que dans les autres régions. Cela s"explique sans doute par le fait que cette région a été touchée légérement avant les autres par le virus et a donc réagi légérement en retard sur qui a causé un pic de décès un peu plus important au début.</br>
+Enfin, un autre point très intéressant est le moment ou le coefficient multiplicateur de la propagation (hospitalisation) du virus est passé en dessous de 1 (appelé R0), c'est à dire le 14 avril. Cette date est très importante car elle montre un tournant dans l'évolution de l'épidémie. En effet, depuis mi-avril l'épidémie ne dépasse que très rarement la barre des 1 (R0) ce qui prouve que l'évolution est décroissante !</p>
+</br></br>
+
+
+
+# Prédiction des survivants
+
+<p style="text-align:justify;">Dans cette partie nous allons réaliser des statistiques plus poussées nous permettant alors de déterminer les survivants potentiels à cette épidémie. Pour cela, il nous faudra d'abord déterminer les variables ayant un réel impact sur la survie ou non des individus. Ensuite, il faudra réussir à catégoriser la population pour réussir à identifier des classes étant plus susceptible de survivre. Dans cette partie, nous allons utiliser des méthodes de data mining et de machine learning tel que le clustering.</p>   
+
+## Solutions pour répondre à ce problème 
+
+### Problème sur les données initiales
+
+Voici quelques statistiques avancées réalisées avec les jeux de données de la France utilisées précédemment. 
+
+```{r}
+HospDate <- sqldf('select * from donnees_hospitalieres_classe_age_covid19_2020_05_18_19h00 where cl_age90 is not "0" ')
+TestCorr <- HospDate[,-3]
+TestCorr$ID <-paste(TestCorr$reg,TestCorr$cl_age90,sep="_")
+TestCorr <- sqldf('select reg, cl_age90, sum(hosp) as hosp, sum(rea) as rea, sum(rad) as rad, sum(dc) as dc from TestCorr group by ID')
+TestCorr <- transform(TestCorr, reg = as.numeric(reg), cl_age90 = as.numeric(cl_age90))
+
+res.pca <- PCA(TestCorr, graph = FALSE)
+eig.val <- get_eigenvalue(res.pca)
+var <- get_pca_var(res.pca)
+fviz_pca_var(res.pca, col.var = "black")
+
+par(mfrow=c(1,2))
+mcor <- cor(TestCorr)
+corrplot(mcor, type="upper", order="hclust", tl.col="black", tl.srt=45)
+title(main = NULL, sub = NULL, xlab = NULL, ylab = "Matrice de corrélation")
+
+model <- rpart(rad ~., data = TestCorr)
+par(xpd = NA) # otherwise on some devices the text is clipped
+#plot(model)
+#text(model, digits = 1)
+prp(model)
+title(main = NULL, sub = NULL, xlab = NULL, ylab = "Arbre de décision")
+par(mfrow=c(1,1))
+```
+
+
+```{r}
+# model <- rpart(reg ~., data = TestCorr)
+# prp(model)
+```
+
+<p style="text-align:justify;">Pourquoi est-ce que les résultats ne sont pas concluants ? Tout simplement car nos données ne sont pas détaillées par individus... En effet, c'est la région qui est considérée comme un individu. De ce fait, tout comme l'ID d'un individu, il n'y a aucune corrélation entre la région (le code région) et les autres données. De plus, on peut voir que toutes les autres variables sont corrélées plus ou moins, ce qui est logique car une personnes hospitalisée à forcément un changement de statut : guéri ou décédé. Il aurait plutôt fallu avoir une variable "survivant : oui / non" ce qui aurait permis dans ce cas des résultats légèrement plus pertinent. </br>
+Pour ce qui est de l'arbre de décision les résultats ne sont pas non plus intéressants. Comme pour le reste la région est considérée comme un individu, cela ne nous permet donc absolument pas de déterminer quel type de personnes vont être les plus probables à la guérison ou non.</p>
+
+### Solutions
+
+<p style="text-align:justify;">Le but principal de notre étude est de se focaliser sur la France et notamment en structurant notre étude par régions. Mais nous avons un problème majeur lié aux données présentent sur le site data.gouv.fr, en effet ces données sont excellentes pour réaliser des statistiques descriptives, des dashboards ou encore des prévisions dans le temps (augmentation ou diminution des hospitalisations pour les prochains jours par exemple). Sauf que dans cette partie, nous voulons réaliser des méthodes de clustering, et pour cela il nous faut un échantillon composé d'individus avec des données détaillées pour chaque individus (id_individu, sexe, âge, région, sympôme, hospitalisation ou non, besoin de réanimation ou non, et surtout conséquence : guéri ou décédé).</br>
+Donc pour obtenir la prédiction des survivants nous avons deux solutions. On peut soit prendre les données sur Kaggle qui présentent énormément d'informations sur les individus. Ces données fonctionneront alors parfaitement dans des algortihmes de clustering, mais le facteur "régions" ne sera pas présent vu que les données seront internationales. Soit nous pouvons tenter de modéliser des individus représentant la population française pour notre étude. Dans ce cas le facteur région sera bien présent, mais on risque de biaiser les résultats car en modélisant nous-même les données nous allons finalement créer les différents clusters. Pour un résultat optimal, nous tenterons alors de réaliser la première méthode et nous appliquerons les résultats au cas de la France.</p> 
+
+
+
+## Analyse avec les données mondiales
+
+
+<p style="text-align:justify;">L'objectif de l'analyse des données mondiales sera de trouver les critères et variables permettant d'expliquer les causes de mortalité ou de survie face au coronavirus. Evidemment le critère géographique sera moindre car les données ne seront pas françaises et donc pas divisées par région. Néanmoins, nous pourrons tout de même analyser par exemple la variable "fréquention de région fortement impactée" décrit dans les données par "passage à Wuhan : Oui / Non"; afin de voir si cela à un rapport dans les résultats.</br>
+Les données utilisées seront celles indiquées dans le lien Kaggle, elles ont été récupérées lors du mois de janvier/février mais permettent tout de même d'obtenir de bonnes observations. Evidemment, elles n'étaient pas utilisables comme telles, un travail conséquent sur le netoyage et le formatage des données a donc été effectué. Pour citer quelques cas, tous les individus comportant des données vides pour les variables age, sexe et résultat (guéri ou décédé) sont supprimés. Un travail important sur les dates a également été effectué afin de pouvoir les utiliser (mise dans un format unique) et donc de pouvoir calculer le nombre de jours entre les premiers symptômes et la première consultation à l'hôpital. Ou encore par exemple, les données symptômes ont été identifiées et traitées indépendamment afin de catégoriser les symptômes des patients en deux grandes catégories : symptômes grippaux (fièvre, frisson, courbature) et les symptômes pulmonaires (toux, essouflement, pneumonie). Enfin, une dernière catégorie a été mise en place : symptômes multiples, permettant alors d'identifier les individus ayant eu des symptômes grippaux et pulmonaires. Par ailleurs, un enjeu au niveau des symptômes a été le traitement des variables non communiquée : NA. Nous avons alors fait le choix dans un premier temps d'émettre l'hypothèse que ces personnes n'ont pas eu de symptômes particuliers dans les catégories citées. Néanmoins, lors de la classification nous testerons également un modèle sans cette hypothèse.</p> 
+
+```{r, echo = FALSE}
+#Filtrage des données non utilisables
+LineList <- LineList %>% filter(!is.na(gender))
+LineList <- LineList %>% filter(!is.na(age))
+LineList <- LineList %>% filter(!is.na(death))
+LineList <- LineList %>% filter(!is.na(recovered))
+LineList <- LineList %>% filter(0!=(death) | 0!=(recovered))
+#Selection et renommage des colonnes 
+DataCovid <- select(LineList, country, gender, age, symptom_onset, X23, X24, hosp_visit_date, `from Wuhan`, death, recovered, symptom, X22)
+DataCovid <- rename(DataCovid, Pays = country, Sexe = gender, Age = age, DebutSymptomes = symptom_onset, SymptomesGrippaux = X23, SymptomesPulmonaires = X24, VisiteHopital = hosp_visit_date, VivreZoneContaminee = `from Wuhan`, Mort = death, Gueri = recovered, Symptomes = symptom, Survivant = X22)
+#Création de la colonne Survivant
+DataCovid$Survivant<-with(DataCovid,ifelse(Mort!=0,"Mort","Guéri"))
+#Création variables Oui/Non
+DataCovid$VivreZoneContaminee<-with(DataCovid,ifelse(VivreZoneContaminee==0,"Non","Oui"))
+DataCovid$Sexe<-with(DataCovid,ifelse(Sexe=="male","Homme","Femme"))
+#Convertir les dates dans le bon format
+DataCovid$DebutSymptomes <- str_replace(DataCovid$DebutSymptomes, "/20", "/2020")
+DataCovid$DebutSymptomes <- str_replace(DataCovid$DebutSymptomes, "/202020", "/2020")
+DataCovid$DebutSymptomes <- str_replace(DataCovid$DebutSymptomes, "/202019", "/2019")
+DataCovid$DebutSymptomes <- str_replace(DataCovid$DebutSymptomes, "/19", "/2019")
+DataCovid$VisiteHopital <- str_replace(DataCovid$VisiteHopital, "/20", "/2020")
+DataCovid$VisiteHopital <- str_replace(DataCovid$VisiteHopital, "/202020", "/2020")
+DataCovid$VisiteHopital <- str_replace(DataCovid$VisiteHopital, "/202019", "/2019")
+DataCovid$VisiteHopital <- str_replace(DataCovid$VisiteHopital, "/19", "/2019")
+DataCovid$DebutSymptomes <- as.Date(DataCovid$DebutSymptomes, "%m/%d/%Y")
+DataCovid$VisiteHopital <- as.Date(DataCovid$VisiteHopital, "%m/%d/%Y")
+#Calcul sur les dates 
+DataCovid$Mort <- abs(DataCovid$VisiteHopital-DataCovid$DebutSymptomes)
+
+#Selection et renommage des colonnes 
+DataCovid <- select(DataCovid, Sexe, Age, VivreZoneContaminee, Mort, Symptomes, SymptomesGrippaux, SymptomesPulmonaires, Survivant) #+ ,Pays
+DataCovid <- rename(DataCovid, TempsConsultationApresSymptomes= Mort)
+# Test <- DataCovid %>% filter(!is.na(Symptomes))
+# Test <- Test %>% filter(!is.na(TempsConsultationApresSymptomes))
+
+
+DataCovid$Symptomes[is.na(DataCovid$Symptomes)] <- "Aucun"
+n = nrow(DataCovid)
+for(i in 1:n) {
+  if ((str_detect(DataCovid$Symptomes[i], "fever")) == TRUE){DataCovid$SymptomesGrippaux[i] = "Oui"}
+  if ((str_detect(DataCovid$Symptomes[i], "feaver")) == TRUE){DataCovid$SymptomesGrippaux[i] = "Oui"}
+  if ((str_detect(DataCovid$Symptomes[i], "chills")) == TRUE){DataCovid$SymptomesGrippaux[i] = "Oui"}
+  if ((str_detect(DataCovid$Symptomes[i], "cold")) == TRUE){DataCovid$SymptomesGrippaux[i] = "Oui"}
+  if ((str_detect(DataCovid$Symptomes[i], "fatigue")) == TRUE){DataCovid$SymptomesGrippaux[i] = "Oui"}
+  if ((str_detect(DataCovid$Symptomes[i], "flu")) == TRUE){DataCovid$SymptomesGrippaux[i] = "Oui"}
+  if ((str_detect(DataCovid$Symptomes[i], "headache")) == TRUE){DataCovid$SymptomesGrippaux[i] = "Oui"}
+  if ((str_detect(DataCovid$Symptomes[i], "muscle pain")) == TRUE){DataCovid$SymptomesGrippaux[i] = "Oui"}
+  if ((str_detect(DataCovid$Symptomes[i], "myalgia")) == TRUE){DataCovid$SymptomesGrippaux[i] = "Oui"}
+  
+  if ((str_detect(DataCovid$Symptomes[i], "pneumonia")) == TRUE){DataCovid$SymptomesPulmonaires[i] = "Oui"}
+  if ((str_detect(DataCovid$Symptomes[i], "cough")) == TRUE){DataCovid$SymptomesPulmonaires[i] = "Oui"}
+  if ((str_detect(DataCovid$Symptomes[i], "runny nose")) == TRUE){DataCovid$SymptomesPulmonaires[i] = "Oui"}
+  if ((str_detect(DataCovid$Symptomes[i], "shortness of breath")) == TRUE){DataCovid$SymptomesPulmonaires[i] = "Oui"}
+  if ((str_detect(DataCovid$Symptomes[i], "difficulty breathing")) == TRUE){DataCovid$SymptomesPulmonaires[i] = "Oui"}
+  if ((str_detect(DataCovid$Symptomes[i], "difficulty in breathing")) == TRUE){DataCovid$SymptomesPulmonaires[i] = "Oui"}
+  if ((str_detect(DataCovid$Symptomes[i], "breathlessness")) == TRUE){DataCovid$SymptomesPulmonaires[i] = "Oui"}
+  if ((str_detect(DataCovid$Symptomes[i], "sore throat")) == TRUE){DataCovid$SymptomesPulmonaires[i] = "Oui"}
+  if ((str_detect(DataCovid$Symptomes[i], "sputum")) == TRUE){DataCovid$SymptomesPulmonaires[i] = "Oui"}
+}
+DataCovid$SymptomesGrippaux[is.na(DataCovid$SymptomesGrippaux)] <- "Non"
+DataCovid$SymptomesPulmonaires[is.na(DataCovid$SymptomesPulmonaires)] <- "Non"
+#Création de la variable symptomes multiples = s_pulmonaires + s_grippaux
+for(i in 1:n) {if ((DataCovid$SymptomesGrippaux[i] == "Oui") && (DataCovid$SymptomesPulmonaires[i] == "Oui")){DataCovid$Symptomes[i] = "Oui"}else{DataCovid$Symptomes[i] = "Non"}}
+DataCovid <- rename(DataCovid, SptMultiples = Symptomes, SptPulmonaires = SymptomesPulmonaires, SptGrippaux = SymptomesGrippaux)
+```
+
+### Description
+
+<p style="text-align:justify;">Tout d'abord, comme ces données sont nouvelles avant de commencer l'analyse en détail, nous allons voir quelques statistiques descriptives. Composition des données et variables que l'on va étudier :</p>
+
+```{r}
+colnames(DataCovid)
+```
+
+<p style="text-align:justify;">Quelques graphiques pour décrire les données :</p>
+
+```{r}
+par(xpd=TRUE, mfrow=c(1,2))
+pie(table(DataCovid$Survivant), main="Part des survivants")
+
+wordcloud("Fievre Frissons Froid Pneumonie Essoufflemment Respirer Fatigue Grippe Malaise Fievre Toux Douleur Muscle Crane.",colors=brewer.pal(6,"Dark2"),random.order=FALSE)
+
+par(xpd=F, mfrow=c(1,2))
+
+boxplot(DataCovid$Age ~ DataCovid$Sexe, main="Age en fonction du sexe", xlab = "Sexe", ylab="Age")
+
+hist(DataCovid$Age, main = "Réparition âge des individus", xlab = "Age", ylab="Nombre d'individus")
+par(mfrow=c(1,1))
+```
+
+
+<p style="text-align:justify;">Ces graphiques nous permettent d'avoir un premier aperçu des données que nous allons étudier. On peut alors constater qu'environ 75% des personnes ont survécu au coronavirus et donc environ 25% en sont décédées. De plus, l'âge moyen est d'environ 50 ans, et on remarque que les hommes sont légèrement plus agés que les femmes. Enfin, on peut lire les divers symptômes présents dans les données de base, qui sont maintenant classés par catégories.</p>
+
+### Modèle complet
+
+<p style="text-align:justify;">Passons désormais à l'analyse plus poussée des donneés. Pour cela, nous utiliserons le principe des arbres de décision avec divers modèles. Commençons avec l'arbre représentant le modèle complet, c'est-à-dire qu'on met toutes les variables présentes dans notre jeu de données.</p>
+
+
+```{r}
+model <- rpart(Survivant~.,data = DataCovid, control=rpart.control(minsplit=12,cp=0.021))
+prp(model)
+```
+
+<p style="text-align:justify;">On constate alors que toutes les variables ne sont pas représentées : seul l'âge, le sexe, la présence ou non des symptômes grippaux et le temps avant de se rendre à l'hôpital depuis les premiers symptômes sont représentés sur cet arbre. D'après notre modèle ce serait alors les variables les plus importantes pour déterminer ou non la surive d'un partient. </br>
+D'après ce graphique un malade atteint du covid serait alors plus susceptibe de survivre s'il a moins de 57 ans, que c'est une femme de moins de 66 ans sans symptômes grippaux ou que c'est un homme de moins de 71 ans ayant consulté en moins de 4 jours et sans symptômes grippaux. </br>
+Testons notre arbre. Pour cela nous allons prédire la survie ou non des individus présents dans les données avec ces restrictions, et nous allons les comparer pour connaitre sa précision. Les résultats sont présents dans cette martrice de confusion.</p>
+
+```{r}
+#Vérification du modèle
+table(DataCovid$Survivant, predict(model, DataCovid, type="class"))
+```
+
+<p style="text-align:justify;">On constate donc que notre classification est assez bonne et permet d'obtenir des prévisions proches de la réalité. On pourrait tout de même qualifier ces prévisions d'optimistes car sur 58 morts connus elle n'en a prédi que 45 (+5 faux). Ces résultats sont positifs mais nous allons tester d'autres modèles avec moins de variables pour essayer d'approcher encore plus la réalité; mais toujours dans le but de ne pas faire du surapprentissage avec notre analyse.</p>
+
+
+### Sous-modèles
+
+```{r}
+par(mfrow=c(1,2))
+#Sous-modèles
+model1 <- rpart(Survivant ~ VivreZoneContaminee + TempsConsultationApresSymptomes,data = DataCovid, control=rpart.control(minsplit=2,cp=0.033))
+model2 <- rpart(Survivant ~  Sexe + TempsConsultationApresSymptomes + VivreZoneContaminee + SptGrippaux + SptPulmonaires + SptMultiples, data = DataCovid, control=rpart.control(minsplit=2,cp=0.012))
+#Arbres
+prp(model1)
+prp(model2)
+par(mfrow=c(1,1))
+```
+
+<p style="text-align:justify;">Ces deux sous-modèles sont très intéressants. Ils nous permettent de mettre en avant de nouvelles variables, de nouvelles caractéristiques sur les données et donc d'avoir d'autres modèles de prédiction.</p>
+
+```{r}
+#Vérification des sous-modèles
+table(DataCovid$Survivant, predict(model1, DataCovid, type="class"))
+table(DataCovid$Survivant, predict(model2, DataCovid, type="class"))
+```
+
+<p style="text-align:justify;">Pour le modèle de gauche, il est assez particulier. Ce serait un très bon modèle pour identifier avec certitude les personnes qui ne vont pas survivre. En effet, ce modèle ne fait presque aucune fausse prédiction de décès, donc même s'il n'est pas très performant dans son ensemble, cette caractéristique fait de lui l'un des modèles à retenir. Par ailleurs, cela signifie également que si l'on vit dans une zone fortement touchée par l'épidémie et que l'on prend plus de 4 jours après le début des symptômes pour consulter, alors le taux de survie est presque nul.</br>
+Pour le modèle de droite, il contient plus de variables permettant la classification et il se rapproche un peu plus du modèle complet de part sa fiabilité meilleure (mais pas optimale !). Cet arbre permet surtout de voir que les hommes ne sont pas égaux au virus face aux femmes. En effet, une femme peut attendre jusqu'à trois jours avant de consulter et à encore toutes ces chances de survie, alors que l'homme lui n'à que deux jours maximum pour consulter après le début des symptômes sinon sa vie est plus en danger.  </p>
+
+### Modèle sans hypothèse 
+
+<p style="text-align:justify;">Le but de ce modèle est de créer un arbre à partir des données 100% justes; c'est-à-dire sans aucunes hypothèses appliquées de notre part. Cela signifie que pour cette analyse nous avons accepté que les individus avec aucun symptômes d'écrit soient considérés comme des données manquantes et non comme des personnes asymptomatiques (ce qui réduit de façon conséquente nos données sur les symptômes).</p>
+
+```{r}
+for(i in 1:n) {if (DataCovid$SptGrippaux[i] == "Non" && DataCovid$SptPulmonaires[i] != "Oui"){DataCovid$SptGrippaux[i] = NA}}
+for(i in 1:n) {if (is.na(DataCovid$SptGrippaux[i]) && DataCovid$SptPulmonaires[i] != "Oui"){DataCovid$SptPulmonaires[i] = NA}}
+for(i in 1:n) {if (DataCovid$SptMultiples[i] == "Non"){DataCovid$SptMultiples[i] = NA}}
+
+
+model1 <- rpart(Survivant~ Sexe + Age + VivreZoneContaminee + SptGrippaux + SptPulmonaires,data = DataCovid, control=rpart.control(minsplit=15,cp=0,017))
+
+prp(model1)
+table(DataCovid$Survivant, predict(model1, DataCovid, type="class"))
+```
+
+
+<p style="text-align:justify;">Les résultats sont alors très différents du modèle complet de base. Par contre, il confirme très fortement les résultats du précédent sous-ensemble. En effet, on peut encore remarquer l'inégalité H/F face au virus : une femme agée de moins de 76 ans a plus de chance de survie qu'un homme du même âge (dernière branche de l'arbre). </p>
+
+
+### Résultats
+
+<p style="text-align:justify;">Nous pouvons alors retenir que certaines variables sont prédominantes dans la survie face à ce virus. La variable intervenant en premier et le plus souvent est l'âge. En effet, une personne jeune (moins de 57 ans) aura beaucoup plus de chance de survie qu'une personne plus agée. Par ailleurs, le sexe est également l'un des éléments fort pour la survie. Une femme sera plus résistante qu'un homme sur deux points : elle pourra survivre même avec un âge plus avancé et elle pourra survivre même en ayant consulté un peu plus tard qu'un homme. </br>
+Enfin d'autres facteurs peuvent influencer la survie d'une personne : le fait de vivre dans une ville très contaminée et le fait d'attendre trop longtemps sont des facteurs à risque pour la survie.</br>
+Pour terminer, l'un des résultats les plus intéressants est celui des symptômes. En effet, malgré le fait d'avoir optimisé au maximum possible la donnée des symptômes en les divisant en deux catégories, cela n'a pas suffit pour qu'ils influent réellement dans ces modèles. Trop peu d'invidus avaient leur symptômes de renseignés. Néanmoins, il est intéressant de noter que dans le modèle complet les symptômes grippaux seuls sont considérés comme rassurants. On peut donc en déduire malgré le peu de données qu'à l'inverse les symptômes pulmonaires doivent être beaucoup plus graves et peuvent très certainement être un facteur de décès.</p>
+
+
+# Prévision sur une région - Ile de France
+
+<p style="text-align:justify;">Dans cette partie, nous nous intéressons en particulier à la région d'Ile de France dans le but de prédire l'évolution du nombre d'hospitalisations pour les prochains jours. Nous avons choisi cette région car c'est la plus touchée en France et par conséquent celle présentant les données les plus importantes.</p>
+
+## Calcul des prochains jours 
+
+<p style="text-align:justify;">Dans un premier temps nous allons calculer la prédiction de l'évolution du taux de contamination du virus. Pour ce faire nous avons décidé de réaliser la prédiction uniquement sur les données disponibles depuis la décroissance du taux de contamination, c'est à dire depuis que ce taux est passé en dessous de 1 (R0) : le 14 avril. En effet, calculer l'évolution de cette épidémie est très complexe de part sa croissance et décroissance non égale. Et comme nous sommes en phase de décroissance, il est plus judicieux de se focaliser que sur ces données. Cela nous permet alors de réaliser un régression linéaire sur les données et voici le résultat.</p>
+
+```{r, cache=TRUE}
+modelPredict <- lm(RatioHosp ~ jour, data = EvolutionCovid11[28:61,])
+EvolutionCovid11$evolution <- predict(modelPredict, EvolutionCovid11)
+
+#plot(EvolutionCovid11$jour, EvolutionCovid11$RatioHosp)
+#abline(modelPredict)
+#summary(modelPredict)
+#coef(modelPredict)
+
+b = 7.18
+a = -0.0003370407
+predictionHosp <- EvolutionCovid11[1:30,c(1,7)]
+for (i in 1:30){(predictionHosp$jour[i] = as.Date(18399+i)) && (predictionHosp$RatioHosp[i] = a*(18399+i)+b)}
+
+m=nrow(predictionHosp)
+for (i in 1:m){predictionHosp$RatioHosp[i] = predictionHosp$RatioHosp[i] + round(runif(1, min=-0.015, max=0.015), digits=5)}
+
+prdHosp <- EvolutionCovid11[1:60,c(1,7)]
+DataPredict <- union(prdHosp, predictionHosp)
+
+couleur<-ifelse(DataPredict$jour>=18400,"red","black")
+```
+
+```{r}
+plot(DataPredict$jour, DataPredict$RatioHosp,  type="p",col=couleur, main="Evolution de la propagation du virus", ylab="Coefficient mutiplicateur", xlab = "Temps")
+abline(modelPredict, col="red",lwd=2)
+abline(h=1, col="purple",lty=2, lwd=3)
+legend("topright", legend=c("Prévisions", "R0"), horiz = FALSE, col=c("red", "purple"), lty=1:2, cex=0.8, pch = NA)
+```
+
+<p style="text-align:justify;">On constate alors que la vitesse du virus continue de diminuer progressivement mais qu'il faudra très certainement attendre longtemps avant de ne plus avoir de contaminations entre les individus. </p>
+
+## Vérification de notre résultat
+
+<p style="text-align:justify;">Les données utilisées pour la prédiction s'arrêtent au 19 mai ce qui nous permet de vérifier notre prédiction avec les données jusqu'au 29 mai. Il est très important de toujours réaliser une prédiction avec quelques données en moins (ici 10) afin de pouvoir vérifier avec toutes les données si le modèle est juste.</p>
+
+```{r}
+donnees_hospitalieres_classe_age_covid19_2020_05_29_19h00 <- read_delim("H:/Desktop/Data_Covid/FranceUtile/CovidHospitalisation/donnees-hospitalieres-classe-age-covid19-2020-05-29-19h00.csv", ";", escape_double = FALSE, trim_ws = TRUE)
+Evolution2Covid11 <- sqldf('Select distinct(jour), cl_age90, sum(hosp) as hosp, sum(rea) as rea, sum(rad) as rad, sum(dc) as dc from donnees_hospitalieres_classe_age_covid19_2020_05_29_19h00 where reg = "11" group by jour')
+
+n=nrow(Evolution2Covid11)
+for(i in 1:n) { 
+  Evolution2Covid11$RatioHosp2[i] <- (Evolution2Covid11$hosp[i+1] / Evolution2Covid11$hosp[i])
+}
+matplot(DataPredict$jour, DataPredict$RatioHosp,  type="p", col="red", pch=16, main="Evolution de la propagation du virus", ylab="Coefficient mutiplicateur", xlab = "Temps", xaxt="n")
+matplot(Evolution2Covid11$jour, Evolution2Covid11$RatioHosp, col="green", pch=16, add = TRUE, main="Evolution de la propagation du virus", ylab="Coefficient mutiplicateur", xlab = "Temps")
+abline(modelPredict, col="red",lwd=2)
+abline(h=1, col="purple",lty=2, lwd=3)
+legend("topright", legend=c("Prévisions", "R0"), horiz = FALSE, col=c("red", "purple"), lty=1:2, cex=0.8, pch = NA)
+```
+
+<p style="text-align:justify;">Nous pouvons alors constater que les données jusqu'au 29 mai (en vert) sont parfaitement dans la continuité de notre prévision (en rouge) ce qui permet alors de renforcer la puissance de ces résultats.</p>
+
+## Application de ces résultats 
+
+<p style="text-align:justify;">Désormais nous allons utiliser ce même modèle afin d'analyser l'évolution des hospitalisations en Ile de France. </p>
+
+```{r}
+modelPredict <- lm(hosp ~ jour, data = EvolutionCovid11[28:61,])
+EvolutionCovid11$evolutionHosp <- predict(modelPredict, EvolutionCovid11)
+
+# plot(EvolutionCovid11$jour, EvolutionCovid11$hosp)
+# abline(modelPredict)
+# summary(modelPredict)
+# coef(modelPredict)
+
+b = 5718970.0524 
+a = -309.9437
+PHosp <- EvolutionCovid11[1:30,c(1,3)]
+for (i in 1:30){(PHosp$jour[i] = as.Date(18399+i)) && (PHosp$hosp[i] = a*(18399+i)+b)}
+
+m=nrow(PHosp)
+for (i in 1:m){PHosp$hosp[i] = PHosp$hosp[i] + round(runif(1, min=-300, max=300), digits=1)}
+
+prevHosp <- EvolutionCovid11[1:60,c(1,3)]
+DataPredict <- union(prevHosp, PHosp)
+
+couleur<-ifelse(DataPredict$jour>=18400,"red","black")
+
+plot(DataPredict$jour, DataPredict$hosp,  type="p",col=couleur, main="Evolution des hospitalisations", ylab="Hospitalisations", xlab = "Temps")
+abline(modelPredict, col="red",lwd=1)
+abline(v=18366, col="purple",lty=2, lwd=3)
+legend("topright", legend=c("Prévisions", "R0"), horiz = FALSE, col=c("red", "purple"), lty=1:2, cex=0.8, pch = NA)
+```
+
+<p style="text-align:justify;">On peut alors constater une baisse progressive et stable. Ce résultat est très encourageant car il montre qu'avec un peu de patience, dans quelques mois il n'y aura plus aucune hospitalisation pour le coronavirus en France. Néanmoins, il est basé sur le fait que la situation ne change pas, c'est-à-dire qu'il n'y ait pas trop de mouvements de la population et aucun nouveau foyer de contaminations important.</br>
+Enfin, nous pouvons également faire le rapprochement avec les évolutions des trois régions les plus touchées de France. Etant donné que leurs résultats étaient extrêment proche pour l'évolution des premiers mois du virus, on peut affirmer que cette décroissance des cas d'hospitalisations sera la même dans ces régions.</p>
+
+# Conclusion
+
+<p style="text-align:justify;">Pour conclure, nous pouvons dire que les personnes les plus susceptibles de survivres sont les personnes jeunes (moins de 56 ans) habitants dans des régions peu touchées par le coronavirus et qui consultent rapidement, dès les premiers symptômes. Enfin, une grosse différence est à noter entre hommes et femmes. En effet, les femmes sont légèrement moins impactées par le virus et surtout sont plus résistentes à ces effets. Par ailleurs, les symptômes grippaux sont plutôt bénins et tendent à une guérison de l'individu. Ce qui laisse penser qu'à l'inverse les symptômes pulmonaires doivent entrainer plus vers le décès (mais pas assez de données avec des individus portant ces symptômes pour le prouver clairement dans les modèles).</br>
+Pour le cas de la France, nous pouvons affirmer que des régions ont été beaucoup plus impactées, notamment l'Ile de France et le Grand Est qui ont vécu une vague d'hospitalisations et de décès très important. Néanmoins, le cas de ces régions est de plus en plus positif car le virus se propage à une vitesse de plus en plus faible ce qui nous a alors permis de prédire une baisse significative des hospitalisations dans les prochain mois. Si la situation ne connait pas un rebondissement avec une deuxième vague d'épidémie, nous pouvons envisager un retour à la normale d'ici la fin de l'été. </p>
